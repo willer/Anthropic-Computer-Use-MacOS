@@ -40,7 +40,14 @@ This demo showcases an AI assistant capable of controlling a computer through na
 - **Anthropic API Key**: Obtain an API key from [Anthropic](https://www.anthropic.com/).
 
 
-[![Watch the video](https://cdn.loom.com/sessions/thumbnails/1aad71b5bb9248ff84b88cf85b123762-with-play.png)](https://www.loom.com/embed/1aad71b5bb9248ff84b88cf85b123762?sid=6aa940f7-2348-4870-8f59-e00ccf6062fd)
+<div>
+  <a href="https://www.loom.com/share/1aad71b5bb9248ff84b88cf85b123762">
+    <p>Finder - computer - 23 October 2024 - Watch Video</p>
+  </a>
+  <a href="https://www.loom.com/share/1aad71b5bb9248ff84b88cf85b123762">
+    <img style="max-width:300px;" src="https://cdn.loom.com/sessions/thumbnails/1aad71b5bb9248ff84b88cf85b123762-86c3144f3c85df1a-full-play.gif" alt="Loom Video Thumbnail">
+  </a>
+</div>
 
 
 ## Installation

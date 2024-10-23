@@ -69,6 +69,7 @@ class ComputerTool(BaseAnthropicTool):
     width: int
     height: int
     display_num: int | None
+    scale_factor: float
 
     _screenshot_delay = 2.0
     _scaling_enabled = True
@@ -89,13 +90,29 @@ class ComputerTool(BaseAnthropicTool):
 
     def __init__(self):
         super().__init__()
-
-        # Get screen width and height using macOS command
+        
+        # Get screen scale factor first
+        self.scale_factor = self.get_screen_scale_factor()
+        
+        # Get logical screen width and height
         self.width, self.height = self.get_screen_size()
         self.display_num = None
 
         # Path to cliclick
         self.cliclick = "cliclick"
+
+    def get_screen_scale_factor(self) -> float:
+        """Get the screen's scaling factor using NSScreen."""
+        from AppKit import NSScreen
+        main_screen = NSScreen.mainScreen()
+        return float(main_screen.backingScaleFactor())
+
+    def get_screen_size(self) -> tuple[int, int]:
+        """Get the logical screen size."""
+        from AppKit import NSScreen
+        main_screen = NSScreen.mainScreen()
+        frame = main_screen.frame()
+        return int(frame.size.width), int(frame.size.height)
 
     async def __call__(
         self,
@@ -115,15 +132,21 @@ class ComputerTool(BaseAnthropicTool):
             if not all(isinstance(i, int) and i >= 0 for i in coordinate):
                 raise ToolError(f"{coordinate} must be a tuple of non-negative ints")
 
+            # Scale the input coordinates
             x, y = self.scale_coordinates(
                 ScalingSource.API, coordinate[0], coordinate[1]
             )
 
+            # Convert to physical coordinates for cliclick
+            x, y = int(x * self.scale_factor), int(y * self.scale_factor)
+
             if action == "mouse_move":
                 return await self.shell(f"{self.cliclick} m:{x},{y}")
             elif action == "left_click_drag":
-                # For cliclick, drag is: dd:<x1>,<y1> du:<x2>,<y2>
                 current_x, current_y = self.get_mouse_position()
+                # Convert to physical coordinates
+                current_x = int(current_x * self.scale_factor)
+                current_y = int(current_y * self.scale_factor)
                 command = f"{self.cliclick} dd:{current_x},{current_y} du:{x},{y}"
                 return await self.shell(command)
 
@@ -136,7 +159,6 @@ class ComputerTool(BaseAnthropicTool):
                 raise ToolError(output=f"{text} must be a string")
 
             if action == "key":
-                # Map text to cliclick key codes if necessary
                 key_sequence = self.map_keys(text)
                 return await self.shell(f"{self.cliclick} kp:{key_sequence}")
             elif action == "type":
@@ -187,11 +209,8 @@ class ComputerTool(BaseAnthropicTool):
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / f"screenshot_{uuid4().hex}.png"
 
-        # Use macOS screencapture command
         screenshot_cmd = f"screencapture -x {path}"
-
         result = await self.shell(screenshot_cmd, take_screenshot=False)
-        # No scaling necessary for macOS in this context
 
         if path.exists():
             return result.replace(
@@ -205,67 +224,44 @@ class ComputerTool(BaseAnthropicTool):
         base64_image = None
 
         if take_screenshot:
-            # delay to let things settle before taking a screenshot
             await asyncio.sleep(self._screenshot_delay)
             base64_image = (await self.screenshot()).base64_image
 
         return ToolResult(output=stdout, error=stderr, base64_image=base64_image)
 
-    def scale_coordinates(self, source: ScalingSource, x: int, y: int):
+    def scale_coordinates(self, source: ScalingSource, x: int, y: int) -> tuple[int, int]:
         """Scale coordinates to a target maximum resolution."""
         if not self._scaling_enabled:
             return x, y
         ratio = self.width / self.height
         target_dimension = None
         for dimension in MAX_SCALING_TARGETS.values():
-            # allow some error in the aspect ratio - not ratios are exactly 16:9
             if abs(dimension["width"] / dimension["height"] - ratio) < 0.02:
                 if dimension["width"] < self.width:
                     target_dimension = dimension
                 break
         if target_dimension is None:
             return x, y
-        # should be less than 1
+        
         x_scaling_factor = target_dimension["width"] / self.width
         y_scaling_factor = target_dimension["height"] / self.height
+        
         if source == ScalingSource.API:
             if x > self.width or y > self.height:
                 raise ToolError(f"Coordinates {x}, {y} are out of bounds")
-            # scale up
             return round(x / x_scaling_factor), round(y / y_scaling_factor)
-        # scale down
         return round(x * x_scaling_factor), round(y * y_scaling_factor)
 
-    def get_screen_size(self):
-        """Get the screen size using macOS command."""
-        import subprocess
-        import re
-
-        cmd = "system_profiler SPDisplaysDataType | grep Resolution"
-        output = subprocess.check_output(cmd, shell=True).decode()
-        # Output might be: '      Resolution: 2560 x 1864 Retina\n'
-        resolution_line = output.strip().split('\n')[0]
-        _, resolution = resolution_line.split(': ', 1)
-        # Use regex to extract width and height
-        match = re.search(r'(\d+)\s*x\s*(\d+)', resolution)
-        if match:
-            width_str, height_str = match.groups()
-            return int(width_str), int(height_str)
-        else:
-            raise ValueError(f"Could not parse resolution from: {resolution}")
-        
-    
-    def get_mouse_position(self):
-        """Get current mouse position using macOS Quartz."""
+    def get_mouse_position(self) -> tuple[int, int]:
+        """Get current mouse position in logical coordinates."""
         from AppKit import NSEvent
-        from Quartz import CGEventSourceCreate, kCGEventSourceStateCombinedSessionState
-
+        
         loc = NSEvent.mouseLocation()
-        # Adjust for different coordinate system
-        return int(loc.x), int(self.height - loc.y)
+        # Convert from physical to logical coordinates
+        x = int(loc.x / self.scale_factor)
+        y = int((self.height) - (loc.y / self.scale_factor))
+        return x, y
 
-    def map_keys(self, text: str):
+    def map_keys(self, text: str) -> str:
         """Map text to cliclick key codes if necessary."""
-        # For simplicity, return text as is
-        # Implement mapping if special keys are needed
         return text

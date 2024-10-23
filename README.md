@@ -177,7 +177,7 @@ This will start the application and provide you with a local URL (e.g., http://l
 ## Acknowledgments
 
 - Original code by Anthropic.
-- Adapted for macOS by [Your Name](https://github.com/yourusername).
+- Adapted for macOS by Jacob Ferrari-Shaikh (https://github.com/newideas99/).
 
 ## License
 

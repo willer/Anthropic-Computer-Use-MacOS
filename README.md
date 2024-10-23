@@ -1,174 +1,192 @@
-# Anthropic Computer Use Demo
 
-> [!CAUTION]
-> Computer use is a beta feature. Please be aware that computer use poses unique risks that are distinct from standard API features or chat interfaces. These risks are heightened when using computer use to interact with the internet. To minimize risks, consider taking precautions such as:
->
-> 1. Use a dedicated virtual machine or container with minimal privileges to prevent direct system attacks or accidents.
-> 2. Avoid giving the model access to sensitive data, such as account login information, to prevent information theft.
-> 3. Limit internet access to an allowlist of domains to reduce exposure to malicious content.
-> 4. Ask a human to confirm decisions that may result in meaningful real-world consequences as well as any tasks requiring affirmative consent, such as accepting cookies, executing financial transactions, or agreeing to terms of service.
->
-> In some circumstances, Claude will follow commands found in content even if it conflicts with the user's instructions. For example, instructions on webpages or contained in images may override user instructions or cause Claude to make mistakes. We suggest taking precautions to isolate Claude from sensitive data and actions to avoid risks related to prompt injection.
->
-> Finally, please inform end users of relevant risks and obtain their consent prior to enabling computer use in your own products.
+# Computer Use Demo for macOS
 
-This repository helps you get started with computer use on Claude, with reference implementations of:
+---
 
-* Build files to create a Docker container with all necessary dependencies
-* A computer use agent loop using the Anthropic API, Bedrock, or Vertex to access the updated Claude 3.5 Sonnet model
-* Anthropic-defined computer use tools
-* A streamlit app for interacting with the agent loop
+## ⚠️ **DANGER WARNING**
 
-Please use [this form](https://forms.gle/BT1hpBrqDPDUrCqo7) to provide feedback on the quality of the model responses, the API itself, or the quality of the documentation - we cannot wait to hear from you!
+**This project enables an AI assistant to control your computer, including executing commands, moving the mouse, typing, and more. Running this code can be very dangerous. Neither I nor Anthropic take any liability for any damage to your computer, data loss, security breaches, or any other harm that may result from using this software. Use it at your own risk. Proceed only if you fully understand the implications and are willing to accept all responsibility.**
 
-> [!IMPORTANT]
-> The Beta API used in this reference implementation is subject to change. Please refer to the [API release notes](https://docs.anthropic.com/en/release-notes/api) for the most up-to-date information.
+---
 
-> [!IMPORTANT]
-> The components are weakly separated: the agent loop runs in the container being controlled by Claude, can only be used by one session at a time, and must be restarted or reset between sessions if necessary.
+This project is adapted from the [Anthropic Quickstarts](https://github.com/anthropics/anthropic-quickstarts), specifically the `computer-use-demo`, modified to run on macOS systems.
 
-## Quickstart: running the Docker container
+This demo showcases an AI assistant capable of controlling a computer through natural language commands. The assistant can perform tasks like moving the mouse, typing text, taking screenshots, and executing bash commands.
 
-### Anthropic API
+## Table of Contents
 
-> [!TIP]
-> You can find your API key in the [Anthropic Console](https://console.anthropic.com/).
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Application](#running-the-application)
+- [Usage](#usage)
+- [Troubleshooting](#troubleshooting)
+- [Acknowledgments](#acknowledgments)
+- [License](#license)
 
-```bash
-export ANTHROPIC_API_KEY=%your_api_key%
-docker run \
-    -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-    -v $HOME/.anthropic:/home/computeruse/.anthropic \
-    -p 5900:5900 \
-    -p 8501:8501 \
-    -p 6080:6080 \
-    -p 8080:8080 \
-    -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
-```
+## Features
 
-Once the container is running, see the [Accessing the demo app](#accessing-the-demo-app) section below for instructions on how to connect to the interface.
+- **Natural Language Interaction**: Control your computer using natural language commands through an AI assistant.
+- **Mouse and Keyboard Control**: Move the mouse, click, and type text.
+- **Screenshot Capabilities**: Capture screenshots and share them within the conversation.
+- **File Editing**: Open, read, and write to files on your system.
+- **Bash Commands**: Execute bash commands directly from the assistant.
 
-### Bedrock
+## Prerequisites
 
-You'll need to pass in AWS credentials with appropriate permissions to use Claude on Bedrock.
+- **macOS**: This demo is designed for macOS systems.
+- **Python 3.11 or Later**: Ensure you have Python 3.11 or a newer version installed.
+- **Anthropic API Key**: Obtain an API key from [Anthropic](https://www.anthropic.com/).
 
-You have a few options for authenticating with Bedrock. See the [boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#environment-variables) for more details and options.
+## Installation
 
-#### Option 1: (suggested) Use the host's AWS credentials file and AWS profile
+### 1. Clone the Repository
 
 ```bash
-export AWS_PROFILE=<your_aws_profile>
-docker run \
-    -e API_PROVIDER=bedrock \
-    -e AWS_PROFILE=$AWS_PROFILE \
-    -e AWS_REGION=us-west-2 \
-    -v $HOME/.aws/credentials:/home/computeruse/.aws/credentials \
-    -v $HOME/.anthropic:/home/computeruse/.anthropic \
-    -p 5900:5900 \
-    -p 8501:8501 \
-    -p 6080:6080 \
-    -p 8080:8080 \
-    -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
+git clone https://github.com/yourusername/computer-use-demo-mac.git
+cd computer-use-demo-mac
 ```
 
-Once the container is running, see the [Accessing the demo app](#accessing-the-demo-app) section below for instructions on how to connect to the interface.
+### 2. Run the Setup Script
 
-#### Option 2: Use an access key and secret
+Make the `setup.sh` script executable if it isn't already:
 
 ```bash
-export AWS_ACCESS_KEY_ID=%your_aws_access_key%
-export AWS_SECRET_ACCESS_KEY=%your_aws_secret_access_key%
-export AWS_SESSION_TOKEN=%your_aws_session_token%
-docker run \
-    -e API_PROVIDER=bedrock \
-    -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-    -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-    -e AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
-    -e AWS_REGION=us-west-2 \
-    -v $HOME/.anthropic:/home/computeruse/.anthropic \
-    -p 5900:5900 \
-    -p 8501:8501 \
-    -p 6080:6080 \
-    -p 8080:8080 \
-    -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
+chmod +x setup.sh
 ```
 
-Once the container is running, see the [Accessing the demo app](#accessing-the-demo-app) section below for instructions on how to connect to the interface.
-
-### Vertex
-
-You'll need to pass in Google Cloud credentials with appropriate permissions to use Claude on Vertex.
+Run the setup script:
 
 ```bash
-docker build . -t computer-use-demo
-gcloud auth application-default login
-export VERTEX_REGION=%your_vertex_region%
-export VERTEX_PROJECT_ID=%your_vertex_project_id%
-docker run \
-    -e API_PROVIDER=vertex \
-    -e CLOUD_ML_REGION=$VERTEX_REGION \
-    -e ANTHROPIC_VERTEX_PROJECT_ID=$VERTEX_PROJECT_ID \
-    -v $HOME/.config/gcloud/application_default_credentials.json:/home/computeruse/.config/gcloud/application_default_credentials.json \
-    -p 5900:5900 \
-    -p 8501:8501 \
-    -p 6080:6080 \
-    -p 8080:8080 \
-    -it computer-use-demo
+./setup.sh
 ```
 
-Once the container is running, see the [Accessing the demo app](#accessing-the-demo-app) section below for instructions on how to connect to the interface.
+**Note:** The script will:
+- Install Homebrew if not already installed.
+- Install system dependencies (cliclick, imagemagick).
+- Install Rust and Cargo if not already installed.
+- Install Xcode Command Line Tools if not already installed.
+- Set up a Python virtual environment.
+- Upgrade pip and install Python dependencies.
+- Install watchdog for Streamlit performance improvements.
 
-This example shows how to use the Google Cloud Application Default Credentials to authenticate with Vertex.
+### 3. Grant Accessibility Permissions
 
-You can also set `GOOGLE_APPLICATION_CREDENTIALS` to use an arbitrary credential file, see the [Google Cloud Authentication documentation](https://cloud.google.com/docs/authentication/application-default-credentials#GAC) for more details.
+Some functionalities require accessibility permissions.
 
-### Accessing the demo app
-
-Once the container is running, open your browser to [http://localhost:8080](http://localhost:8080) to access the combined interface that includes both the agent chat and desktop view.
-
-The container stores settings like the API key and custom system prompt in `~/.anthropic/`. Mount this directory to persist these settings between container runs.
-
-Alternative access points:
-
-- Streamlit interface only: [http://localhost:8501](http://localhost:8501)
-- Desktop view only: [http://localhost:6080/vnc.html](http://localhost:6080/vnc.html)
-- Direct VNC connection: `vnc://localhost:5900` (for VNC clients)
-
-## Screen size
-
-Environment variables `WIDTH` and `HEIGHT` can be used to set the screen size. For example:
+- Go to **System Preferences > Security & Privacy > Privacy** tab.
+- Select **Accessibility** from the left pane.
+- Click the lock icon to make changes and authenticate.
+- Click the "+" button and add your terminal application (e.g., Terminal, iTerm).
+- Also, add the Python executable located in your virtual environment:
 
 ```bash
-docker run \
-    -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-    -v $HOME/.anthropic:/home/computeruse/.anthropic \
-    -p 5900:5900 \
-    -p 8501:8501 \
-    -p 6080:6080 \
-    -p 8080:8080 \
-    -e WIDTH=1920 \
-    -e HEIGHT=1080 \
-    -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
+/path/to/computer-use-demo-mac/.venv/bin/python
 ```
 
-We do not recommend sending screenshots in resolutions above [XGA/WXGA](https://en.wikipedia.org/wiki/Display_resolution_standards#XGA) to avoid issues related to [image resizing](https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size).
-Relying on the image resizing behavior in the API will result in lower model accuracy and slower performance than implementing scaling in your tools directly. The `computer` tool implementation in this project demonstrates how to scale both images and coordinates from higher resolutions to the suggested resolutions.
+**Important:** Ensure both your terminal application and the Python interpreter have accessibility permissions.
 
-## Development
+## Configuration
+
+### 1. Set Up the Anthropic API Key
+
+- Obtain your API key from Anthropic.
+- Create a file named `.env` in the project root directory and add your API key:
 
 ```bash
-./setup.sh  # configure venv, install development dependencies, and install pre-commit hooks
-docker build . -t computer-use-demo:local  # manually build the docker image (optional)
-export ANTHROPIC_API_KEY=%your_api_key%
-docker run \
-    -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-    -v $(pwd)/computer_use_demo:/home/computeruse/computer_use_demo/ `# mount local python module for development` \
-    -v $HOME/.anthropic:/home/computeruse/.anthropic \
-    -p 5900:5900 \
-    -p 8501:8501 \
-    -p 6080:6080 \
-    -p 8080:8080 \
-    -it computer-use-demo:local  # can also use ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
+echo "ANTHROPIC_API_KEY=your_api_key_here" > .env
 ```
 
-The docker run command above mounts the repo inside the docker image, such that you can edit files from the host. Streamlit is already configured with auto reloading.
+Alternatively, you can export the API key as an environment variable in your shell:
+
+```bash
+export ANTHROPIC_API_KEY=your_api_key_here
+```
+
+### 2. (Optional) Configure the System Prompt
+
+You can customize the system prompt by editing the `SYSTEM_PROMPT` in `computer_use_demo/loop.py`:
+
+```python
+SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
+* You are utilizing a macOS system with internet access.
+* You can install applications using Homebrew.
+* Use `curl` instead of `wget`.
+* The current date is {datetime.today().strftime('%A, %B %-d, %Y')}.
+</SYSTEM_CAPABILITY>
+"""
+```
+
+## Running the Application
+
+Activate your virtual environment if you haven't already:
+
+```bash
+source .venv/bin/activate
+```
+
+Run the Streamlit application:
+
+```bash
+streamlit run app.py
+```
+
+This will start the application and provide you with a local URL (e.g., http://localhost:8501) to access the interface in your browser.
+
+## Usage
+
+1. **Access the Application**: Open the provided local URL in your web browser.
+2. **Enter Your API Key**: If not set via environment variable or `.env` file, enter your Anthropic API key in the sidebar.
+3. **Interact with the Assistant**: Use the chat interface to send commands to the assistant.
+   - **Examples of Commands**:
+     - "Open a new browser window and navigate to example.com."
+     - "Take a screenshot of the current screen."
+     - "Type 'Hello, World!' into the text editor."
+     - "Run the command `ls -la` in the terminal."
+4. **View Results**: The assistant's responses and any outputs (e.g., screenshots, command outputs) will appear in the chat interface.
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+1. **Permission Denied Errors**
+   - **Symptom**: Errors related to permissions when installing packages or running commands.
+   - **Solution**: Ensure you have the necessary permissions. Run commands with `sudo` if required, but use caution.
+
+2. **ModuleNotFoundError**
+   - **Symptom**: Python cannot find a module when running the application.
+   - **Solution**: Ensure that your virtual environment is activated and that all dependencies are installed.
+
+3. **ValueError in `get_screen_size`**
+   - **Symptom**: Error related to screen resolution parsing.
+   - **Solution**: The `get_screen_size` method in `computer.py` has been updated to handle macOS output. Ensure you have the latest code.
+
+4. **Accessibility Permissions Not Working**
+   - **Symptom**: The assistant cannot control the mouse or keyboard.
+   - **Solution**: Double-check that you have granted accessibility permissions to your terminal and Python applications.
+
+5. **Streamlit Warnings About Watchdog**
+   - **Symptom**: Streamlit recommends installing the `Watchdog` module for better performance.
+   - **Solution**: The `setup.sh` script installs Watchdog. If you still see warnings, ensure it's installed in your virtual environment:
+
+   ```bash
+   pip install watchdog
+   ```
+
+## Acknowledgments
+
+- Original code by Anthropic.
+- Adapted for macOS by [Your Name](https://github.com/yourusername).
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+---
+
+**Disclaimer:** This project is for educational purposes. Be extremely cautious when granting applications accessibility permissions, and ensure you understand the implications of allowing an AI assistant to control your computer. Neither I nor Anthropic take any liability for any damage to your computer, data loss, security breaches, or any other harm that may result from using this software. Use it at your own risk.
+
+**Important Note:** By using this software, you acknowledge that running code which allows an AI to control your computer can pose significant risks, including unintended execution of commands, data corruption, or exposure of sensitive information. Ensure that you run this software in a controlled environment, such as a virtual machine or a non-critical system, and understand all the potential consequences.
+
+**Stay Safe:** Always monitor the assistant's actions carefully. Do not provide sensitive information or access to critical systems.

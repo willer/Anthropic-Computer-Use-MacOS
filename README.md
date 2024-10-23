@@ -39,6 +39,10 @@ This demo showcases an AI assistant capable of controlling a computer through na
 - **Python 3.11 or Later**: Ensure you have Python 3.11 or a newer version installed.
 - **Anthropic API Key**: Obtain an API key from [Anthropic](https://www.anthropic.com/).
 
+
+[![Watch the video](https://cdn.loom.com/sessions/thumbnails/1aad71b5bb9248ff84b88cf85b123762-with-play.png)](https://www.loom.com/embed/1aad71b5bb9248ff84b88cf85b123762?sid=6aa940f7-2348-4870-8f59-e00ccf6062fd)
+
+
 ## Installation
 
 ### 1. Clone the Repository

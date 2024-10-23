@@ -57,13 +57,29 @@ pip install --upgrade pip
 
 # 7. Install Python Dependencies
 echo "Installing Python dependencies..."
-pip install -r requirements.txt
+pip install -r dev-requirements.txt
 
 # 8. Install Watchdog (recommended by Streamlit)
 echo "Installing Watchdog..."
 pip install watchdog
 
+# 9. Install Dependencies for computer_use_demo
+COMPUTER_USE_DEMO_DIR="./computer_use_demo"
+
+if [ -d "$COMPUTER_USE_DEMO_DIR" ]; then
+    echo "Navigating to computer_use_demo folder..."
+    cd "$COMPUTER_USE_DEMO_DIR"
+    if [ -f "requirements.txt" ]; then
+        echo "Installing dependencies from computer_use_demo/requirements.txt..."
+        pip install -r requirements.txt
+    else
+        echo "requirements.txt not found in computer_use_demo. Skipping..."
+    fi
+    cd -  # Return to the previous directory
+else
+    echo "computer_use_demo folder not found. Skipping..."
+fi
+
 echo "Setup completed successfully!"
 
 echo "Please ensure you have granted Accessibility permissions to your terminal application and Python interpreter as per the README instructions."
-

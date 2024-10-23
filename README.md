@@ -45,7 +45,7 @@ This demo showcases an AI assistant capable of controlling a computer through na
 
 ```bash
 git clone https://github.com/newideas99/Anthropic-Computer-Use-MacOS.git
-cd computer-use-demo-mac
+cd computer-use-demo
 ```
 
 ### 2. Run the Setup Script

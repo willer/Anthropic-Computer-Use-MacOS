@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal, TypedDict
 from uuid import uuid4
 
+from AppKit import NSScreen, NSEvent
 from anthropic.types.beta import BetaToolComputerUse20241022Param
 
 from .base import BaseAnthropicTool, ToolError, ToolResult
@@ -58,6 +59,16 @@ def chunks(s: str, chunk_size: int) -> list[str]:
     return [s[i : i + chunk_size] for i in range(0, len(s), chunk_size)]
 
 
+class ScreenInfo(TypedDict):
+    display_id: int
+    width: int
+    height: int
+    description: str
+    origin_x: int  # Position relative to main screen
+    origin_y: int  # Position relative to main screen
+    scale_factor: float
+
+
 class ComputerTool(BaseAnthropicTool):
     """
     A tool that allows the agent to interact with the screen, keyboard, and mouse of the current computer.
@@ -68,7 +79,7 @@ class ComputerTool(BaseAnthropicTool):
     api_type: Literal["computer_20241022"] = "computer_20241022"
     width: int
     height: int
-    display_num: int | None
+    display_id: int  # Changed from display_num
     scale_factor: float
 
     _screenshot_delay = 2.0
@@ -82,34 +93,50 @@ class ComputerTool(BaseAnthropicTool):
         return {
             "display_width_px": width,
             "display_height_px": height,
-            "display_number": self.display_num,
+            "display_number": self.display_id,  # Changed from display_num
         }
 
     def to_params(self) -> BetaToolComputerUse20241022Param:
         return {"name": self.name, "type": self.api_type, **self.options}
 
-    def __init__(self):
+    def __init__(self, display_id: int = 0):
         super().__init__()
         
-        # Get screen scale factor first
-        self.scale_factor = self.get_screen_scale_factor()
+        # Store the display ID
+        self.display_id = display_id
         
-        # Get logical screen width and height
-        self.width, self.height = self.get_screen_size()
-        self.display_num = None
-
+        # Get the selected screen
+        screens = NSScreen.screens()
+        if display_id >= len(screens):
+            self.display_id = 0  # Fall back to main display
+        
+        selected_screen = screens[self.display_id]
+        frame = selected_screen.frame()
+        
+        # Get scale factor for selected screen
+        self.scale_factor = float(selected_screen.backingScaleFactor())
+        
+        # Get logical screen dimensions and position
+        self.width = int(frame.size.width)
+        self.height = int(frame.size.height)
+        self.origin_x = int(frame.origin.x)
+        
+        # Calculate Y origin in global positioning terms from the top-left corner of the main screen
+        # (it's returned based on its bottom-left corner relative to the main screen's bottom-left corner)
+        main_screen = NSScreen.mainScreen()
+        main_height = main_screen.frame().size.height
+        self.origin_y = int(main_height - frame.origin.y - frame.size.height)
+        
         # Path to cliclick
         self.cliclick = "cliclick"
 
     def get_screen_scale_factor(self) -> float:
         """Get the screen's scaling factor using NSScreen."""
-        from AppKit import NSScreen
         main_screen = NSScreen.mainScreen()
         return float(main_screen.backingScaleFactor())
 
     def get_screen_size(self) -> tuple[int, int]:
         """Get the logical screen size."""
-        from AppKit import NSScreen
         main_screen = NSScreen.mainScreen()
         frame = main_screen.frame()
         return int(frame.size.width), int(frame.size.height)
@@ -131,23 +158,23 @@ class ComputerTool(BaseAnthropicTool):
                 raise ToolError(f"{coordinate} must be a tuple of length 2")
             if not all(isinstance(i, int) and i >= 0 for i in coordinate):
                 raise ToolError(f"{coordinate} must be a tuple of non-negative ints")
+            
+            print(f"Input coordinate: {coordinate}")
 
-            # Scale the input coordinates
-            x, y = self.scale_coordinates(
-                ScalingSource.API, coordinate[0], coordinate[1]
-            )
-
-            # Convert to physical coordinates for cliclick
-            x, y = int(x * self.scale_factor), int(y * self.scale_factor)
+            # 1. Input coordinates are in logical pixels for the target screen
+            x, y = coordinate[0], coordinate[1]
+            
+            # 2. Add screen origin offset for X
+            x += self.origin_x
+            y += self.origin_y
+            
+            print(f"Final coordinates after offset: {x}, {y}")
 
             if action == "mouse_move":
-                return await self.shell(f"{self.cliclick} m:{x},{y}")
+                return await self.shell(f"{self.cliclick} -e800 m:{x},{y}")
             elif action == "left_click_drag":
                 current_x, current_y = self.get_mouse_position()
-                # Convert to physical coordinates
-                current_x = int(current_x * self.scale_factor)
-                current_y = int(current_y * self.scale_factor)
-                command = f"{self.cliclick} dd:{current_x},{current_y} du:{x},{y}"
+                command = f"{self.cliclick} -e800 dd:{current_x},{current_y} du:{x},{y}"
                 return await self.shell(command)
 
         if action in ("key", "type"):
@@ -204,17 +231,23 @@ class ComputerTool(BaseAnthropicTool):
         raise ToolError(f"Invalid action: {action}")
 
     async def screenshot(self):
-        """Take a screenshot of the current screen and return the base64 encoded image."""
+        """Take a screenshot and scale it to logical resolution."""
         output_dir = Path(OUTPUT_DIR)
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / f"screenshot_{uuid4().hex}.png"
+        resized_path = output_dir / f"screenshot_{uuid4().hex}_resized.png"
 
-        screenshot_cmd = f"screencapture -x {path}"
+        # Take screenshot at native resolution
+        screenshot_cmd = f"screencapture -D {self.display_id + 1} -x {path}"
         result = await self.shell(screenshot_cmd, take_screenshot=False)
-
+        
         if path.exists():
+            # Scale down to logical resolution if needed using ImageMagick
+            convert_cmd = f"convert {path} -resize {self.width}x{self.height} {resized_path}"
+            await run(convert_cmd)
+            
             return result.replace(
-                base64_image=base64.b64encode(path.read_bytes()).decode()
+                base64_image=base64.b64encode(resized_path.read_bytes()).decode()
             )
         raise ToolError(f"Failed to take screenshot: {result.error}")
 
@@ -254,14 +287,45 @@ class ComputerTool(BaseAnthropicTool):
 
     def get_mouse_position(self) -> tuple[int, int]:
         """Get current mouse position in logical coordinates."""
-        from AppKit import NSEvent
-        
         loc = NSEvent.mouseLocation()
-        # Convert from physical to logical coordinates
-        x = int(loc.x / self.scale_factor)
-        y = int((self.height) - (loc.y / self.scale_factor))
+        # Convert to logical coordinates
+        x = int(loc.x)
+        y = int(self.height - loc.y)
         return x, y
 
     def map_keys(self, text: str) -> str:
         """Map text to cliclick key codes if necessary."""
+        if text.lower() == "enter":
+            return "return"
         return text
+
+    @staticmethod
+    def get_available_screens() -> list[ScreenInfo]:
+        """Get information about all available screens."""
+        screens = []
+        main_screen = NSScreen.mainScreen()
+        main_height = main_screen.frame().size.height
+        
+        for i, screen in enumerate(NSScreen.screens()):
+            frame = screen.frame()
+            scale = screen.backingScaleFactor()
+            # Get logical dimensions
+            width = int(frame.size.width)
+            height = int(frame.size.height)
+            # Calculate position relative to main screen
+            origin_x = int(frame.origin.x)
+            # Y origin is main screen height minus (current screen Y origin + current screen height)
+            origin_y = int(main_height - (frame.origin.y + frame.size.height))
+            
+            description = f"Display {i} ({width}x{height} @ {origin_x},{origin_y})"
+            screens.append(ScreenInfo(
+                display_id=i,
+                width=width,
+                height=height,
+                description=description,
+                origin_x=origin_x,
+                origin_y=origin_y,
+                scale_factor=float(scale)
+            ))
+        return screens
+

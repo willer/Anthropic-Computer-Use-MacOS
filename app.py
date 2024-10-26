@@ -81,6 +81,8 @@ def setup_state():
         st.session_state.custom_system_prompt = load_from_storage("system_prompt") or ""
     if "hide_images" not in st.session_state:
         st.session_state.hide_images = False
+    if "selected_display" not in st.session_state:
+        st.session_state.selected_display = int(load_from_storage("selected_display") or 0)
 
 
 def _reset_model():
@@ -142,6 +144,25 @@ async def main():
             ),
         )
         st.checkbox("Hide screenshots", key="hide_images")
+
+        # Add screen selection
+        from computer_use_demo.tools.computer import ComputerTool
+        available_screens = ComputerTool.get_available_screens()
+        screen_options = [screen["description"] for screen in available_screens]
+        
+        if screen_options:
+            selected_index = st.selectbox(
+                "Select Display",
+                range(len(screen_options)),
+                format_func=lambda x: screen_options[x],
+                index=min(st.session_state.selected_display, len(screen_options)-1),
+                key="display_selector",
+                help="Choose which display to control"
+            )
+            
+            if selected_index != st.session_state.selected_display:
+                st.session_state.selected_display = selected_index
+                save_to_storage("selected_display", str(selected_index))
 
         if st.button("Reset", type="primary"):
             with st.spinner("Resetting..."):
@@ -226,6 +247,7 @@ async def main():
                 ),
                 api_key=st.session_state.api_key,
                 only_n_most_recent_images=st.session_state.only_n_most_recent_images,
+                display_id=st.session_state.selected_display,
             )
 
 
@@ -355,3 +377,4 @@ def _render_message(
 
 if __name__ == "__main__":
     asyncio.run(main())
+

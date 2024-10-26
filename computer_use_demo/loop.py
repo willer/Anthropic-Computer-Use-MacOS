@@ -18,8 +18,10 @@ from anthropic.types.beta import (
     BetaImageBlockParam,
     BetaMessage,
     BetaMessageParam,
+    BetaTextBlock,
     BetaTextBlockParam,
     BetaToolResultBlockParam,
+    BetaToolUseBlock,
 )
 
 from .tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
@@ -56,24 +58,26 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
 
 async def sampling_loop(
     *,
+    system_prompt_suffix: str = "",
     model: str,
     provider: APIProvider,
-    system_prompt_suffix: str,
-    messages: list[BetaMessageParam],
-    output_callback: Callable[[BetaContentBlock], None],
+    messages: list[dict],
+    output_callback: Callable[[str | BetaTextBlock | BetaToolUseBlock], None],
     tool_output_callback: Callable[[ToolResult, str], None],
     api_response_callback: Callable[[APIResponse[BetaMessage]], None],
-    api_key: str,
-    only_n_most_recent_images: int | None = None,
-    max_tokens: int = 4096,
-):
+    api_key: str | None = None,
+    only_n_most_recent_images: int = 10,
+    display_id: int = 0,
+) -> list[dict]:
     """
     Agentic sampling loop for the assistant/tool interaction of computer use.
     """
-    tool_collection = ToolCollection(
-        ComputerTool(),
-        BashTool(),
-        EditTool(),
+    tools = ToolCollection(
+        [
+            ComputerTool(display_id=display_id),
+            BashTool(),
+            EditTool(),
+        ]
     )
     system = (
         f"{SYSTEM_PROMPT}{' ' + system_prompt_suffix if system_prompt_suffix else ''}"
@@ -95,11 +99,11 @@ async def sampling_loop(
         # implementation may be able call the SDK directly with:
         # `response = client.messages.create(...)` instead.
         raw_response = client.beta.messages.with_raw_response.create(
-            max_tokens=max_tokens,
+            max_tokens=4096,
             messages=messages,
             model=model,
             system=system,
-            tools=tool_collection.to_params(),
+            tools=tools.to_params(),
             betas=["computer-use-2024-10-22"],
         )
 
@@ -118,7 +122,7 @@ async def sampling_loop(
         for content_block in cast(list[BetaContentBlock], response.content):
             output_callback(content_block)
             if content_block.type == "tool_use":
-                result = await tool_collection.run(
+                result = await tools.run(
                     name=content_block.name,
                     tool_input=cast(dict[str, Any], content_block.input),
                 )

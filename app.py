@@ -63,12 +63,14 @@ def setup_state():
         )
     if "provider" not in st.session_state:
         st.session_state.provider = (
-            os.getenv("API_PROVIDER", "anthropic") or APIProvider.ANTHROPIC
+            load_from_storage("provider") 
+            or os.getenv("API_PROVIDER", "anthropic") 
+            or APIProvider.ANTHROPIC
         )
     if "provider_radio" not in st.session_state:
         st.session_state.provider_radio = st.session_state.provider
     if "model" not in st.session_state:
-        _reset_model()
+        st.session_state.model = load_from_storage("model") or _get_default_model()
     if "auth_validated" not in st.session_state:
         st.session_state.auth_validated = False
     if "responses" not in st.session_state:
@@ -76,19 +78,26 @@ def setup_state():
     if "tools" not in st.session_state:
         st.session_state.tools = {}
     if "only_n_most_recent_images" not in st.session_state:
-        st.session_state.only_n_most_recent_images = 10
+        stored_n = load_from_storage("only_n_most_recent_images")
+        st.session_state.only_n_most_recent_images = int(stored_n) if stored_n else 10
     if "custom_system_prompt" not in st.session_state:
         st.session_state.custom_system_prompt = load_from_storage("system_prompt") or ""
     if "hide_images" not in st.session_state:
-        st.session_state.hide_images = False
+        stored_hide = load_from_storage("hide_images")
+        st.session_state.hide_images = stored_hide.lower() == "true" if stored_hide else False
     if "selected_display" not in st.session_state:
         st.session_state.selected_display = int(load_from_storage("selected_display") or 0)
 
-
-def _reset_model():
-    st.session_state.model = PROVIDER_TO_DEFAULT_MODEL_NAME[
+# Add this helper function
+def _get_default_model():
+    return PROVIDER_TO_DEFAULT_MODEL_NAME[
         cast(APIProvider, st.session_state.provider)
     ]
+
+# Modify the _reset_model function
+def _reset_model():
+    st.session_state.model = _get_default_model()
+    save_to_storage("model", st.session_state.model)
 
 
 async def main():
@@ -108,6 +117,7 @@ async def main():
             if st.session_state.provider_radio != st.session_state.provider:
                 _reset_model()
                 st.session_state.provider = st.session_state.provider_radio
+                save_to_storage("provider", st.session_state.provider)
                 st.session_state.auth_validated = False
 
         provider_options = [option.value for option in APIProvider]
@@ -119,7 +129,11 @@ async def main():
             on_change=_reset_api_provider,
         )
 
-        st.text_input("Model", key="model")
+        st.text_input(
+            "Model", 
+            key="model",
+            on_change=lambda: save_to_storage("model", st.session_state.model)
+        )
 
         if st.session_state.provider == APIProvider.ANTHROPIC:
             st.text_input(
@@ -134,6 +148,7 @@ async def main():
             min_value=0,
             key="only_n_most_recent_images",
             help="To decrease the total tokens sent, remove older screenshots from the conversation",
+            on_change=lambda: save_to_storage("only_n_most_recent_images", str(st.session_state.only_n_most_recent_images))
         )
         st.text_area(
             "Custom System Prompt Suffix",
@@ -143,7 +158,11 @@ async def main():
                 "system_prompt", st.session_state.custom_system_prompt
             ),
         )
-        st.checkbox("Hide screenshots", key="hide_images")
+        st.checkbox(
+            "Hide screenshots", 
+            key="hide_images",
+            on_change=lambda: save_to_storage("hide_images", str(st.session_state.hide_images))
+        )
 
         # Add screen selection
         from computer_use_demo.tools.computer import ComputerTool
@@ -342,6 +361,9 @@ def _render_message(
     message: str | BetaTextBlock | BetaToolUseBlock | ToolResult,
 ):
     """Convert input from the user or output from the agent to a streamlit message."""
+    # Mirror to console first
+    print(f"\n[{sender.upper()}]")
+    
     # streamlit's hotreloading breaks isinstance checks, so we need to check for class names
     is_tool_result = not isinstance(message, str) and (
         isinstance(message, ToolResult)
@@ -361,18 +383,27 @@ def _render_message(
             if message.output:
                 if message.__class__.__name__ == "CLIResult":
                     st.code(message.output)
+                    print(f"CLI Output:\n{message.output}")
                 else:
                     st.markdown(message.output)
+                    print(f"Tool Output:\n{message.output}")
             if message.error:
                 st.error(message.error)
+                print(f"Error:\n{message.error}")
             if message.base64_image and not st.session_state.hide_images:
                 st.image(base64.b64decode(message.base64_image))
+                print("(Image displayed)")
         elif isinstance(message, BetaTextBlock) or isinstance(message, TextBlock):
             st.write(message.text)
+            print(message.text)
         elif isinstance(message, BetaToolUseBlock) or isinstance(message, ToolUseBlock):
-            st.code(f"Tool Use: {message.name}\nInput: {message.input}")
+            tool_message = f"Tool Use: {message.name}\nInput: {message.input}"
+            st.code(tool_message)
+            print(tool_message)
         else:
             st.markdown(message)
+            print(message)
+    print("-" * 80)  # Add a separator line between messages
 
 
 if __name__ == "__main__":

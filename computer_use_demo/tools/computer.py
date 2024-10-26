@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import os
+from re import A
 import shlex
 from enum import StrEnum
 from pathlib import Path
@@ -171,10 +172,10 @@ class ComputerTool(BaseAnthropicTool):
             print(f"Final coordinates after offset: {x}, {y}")
 
             if action == "mouse_move":
-                return await self.shell(f"{self.cliclick} -e800 m:{x},{y}")
+                return await self.shell(f"{self.cliclick} -e100 m:{x},{y}")
             elif action == "left_click_drag":
                 current_x, current_y = self.get_mouse_position()
-                command = f"{self.cliclick} -e800 dd:{current_x},{current_y} du:{x},{y}"
+                command = f"{self.cliclick} -e100 dd:{current_x},{current_y} du:{x},{y}"
                 return await self.shell(command)
 
         if action in ("key", "type"):
@@ -226,7 +227,7 @@ class ComputerTool(BaseAnthropicTool):
                     "middle_click": "mc:.",
                     "double_click": "dc:.",
                 }[action]
-                return await self.shell(f"{self.cliclick} {click_arg}")
+                return await self.shell(f"{self.cliclick} -e100 {click_arg}")
 
         raise ToolError(f"Invalid action: {action}")
 
@@ -295,8 +296,9 @@ class ComputerTool(BaseAnthropicTool):
 
     def map_keys(self, text: str) -> str:
         """Map text to cliclick key codes if necessary."""
-        if text.lower() == "enter":
-            return "return"
+        text = text.strip()
+        if text == "Return":
+            text = "return"
         return text
 
     @staticmethod

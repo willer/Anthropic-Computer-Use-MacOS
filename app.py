@@ -404,6 +404,17 @@ def _render_message(
             st.markdown(message)
             print(message)
     print("-" * 80)  # Add a separator line between messages
+    
+    # Add auto-scroll JavaScript
+    js = """
+    <script>
+        function scroll() {
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+        scroll();
+    </script>
+    """
+    st.components.v1.html(js, height=0)
 
 
 if __name__ == "__main__":

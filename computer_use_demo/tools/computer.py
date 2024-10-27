@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from AppKit import NSScreen, NSEvent
 from anthropic.types.beta import BetaToolComputerUse20241022Param
+from PIL import Image
 
 from .base import BaseAnthropicTool, ToolError, ToolResult
 from .run import run
@@ -17,6 +18,7 @@ OUTPUT_DIR = "/tmp/outputs"
 
 TYPING_DELAY_MS = 12
 TYPING_GROUP_SIZE = 50
+SHELL_SCREENSHOT_DELAY = 2.0
 
 Action = Literal[
     "key",
@@ -82,7 +84,6 @@ class ComputerTool(BaseAnthropicTool):
     display_id: int  # Changed from display_num
     scale_factor: float
 
-    _screenshot_delay = 2.0
     _scaling_enabled = True
 
     @property
@@ -126,6 +127,8 @@ class ComputerTool(BaseAnthropicTool):
         main_screen = NSScreen.mainScreen()
         main_height = main_screen.frame().size.height
         self.origin_y = int(main_height - frame.origin.y - frame.size.height)
+
+        print(f"DEBUG: screen {self.display_id} {self.width} x {self.height} @ {self.origin_x}, {self.origin_y}")
         
         # Path to cliclick
         self.cliclick = "cliclick"
@@ -140,6 +143,11 @@ class ComputerTool(BaseAnthropicTool):
         main_screen = NSScreen.mainScreen()
         frame = main_screen.frame()
         return int(frame.size.width), int(frame.size.height)
+
+    def image_dimensions(self, path: Path) -> tuple[int, int]:
+        """Get the dimensions of an image."""
+        img = Image.open(path)
+        return img.width, img.height
 
     async def __call__(
         self,
@@ -159,7 +167,7 @@ class ComputerTool(BaseAnthropicTool):
             if not all(isinstance(i, int) and i >= 0 for i in coordinate):
                 raise ToolError(f"{coordinate} must be a tuple of non-negative ints")
             
-            print(f"Input coordinate: {coordinate}")
+            print(f"DEBUG: Input coordinate: {coordinate}")
 
             # 1. Input coordinates are in logical pixels for the target screen
             x, y = coordinate[0], coordinate[1]
@@ -168,10 +176,10 @@ class ComputerTool(BaseAnthropicTool):
             x += self.origin_x
             y += self.origin_y
             
-            print(f"Final coordinates after offset: {x}, {y}")
+            print(f"DEBUG: Final coordinates after offset: {x}, {y}")
 
             if action == "mouse_move":
-                return await self.shell(f"{self.cliclick} -e800 m:{x},{y}")
+                return await self.shell(f"{self.cliclick} -e300 m:{x},{y}")
             elif action == "left_click_drag":
                 current_x, current_y = self.get_mouse_position()
                 command = f"{self.cliclick} -e800 dd:{current_x},{current_y} du:{x},{y}"
@@ -238,16 +246,23 @@ class ComputerTool(BaseAnthropicTool):
         resized_path = output_dir / f"screenshot_{uuid4().hex}_resized.png"
 
         # Take screenshot at native resolution
-        screenshot_cmd = f"screencapture -D {self.display_id + 1} -x {path}"
+        screenshot_cmd = f"screencapture -C -D {self.display_id + 1} -x {path}"
         result = await self.shell(screenshot_cmd, take_screenshot=False)
+        img_width, img_height = self.image_dimensions(path)
+        print(f"DEBUG: initial image {path} {img_width} x {img_height}")
         
         if path.exists():
             # Scale down to logical resolution if needed using ImageMagick
-            convert_cmd = f"convert {path} -resize {self.width}x{self.height} {resized_path}"
-            await run(convert_cmd)
+            if img_width != self.width or img_height != self.height:
+                convert_cmd = f"convert {path} -resize {self.width}x{self.height} {resized_path}"
+                print(f"DEBUG: converting image with cmd {convert_cmd}")
+                await run(convert_cmd)
+                path = resized_path
+                img_width, img_height = self.image_dimensions(resized_path)
+                print(f"DEBUG: converted image {resized_path} {img_width} x {img_height}")
             
             return result.replace(
-                base64_image=base64.b64encode(resized_path.read_bytes()).decode()
+                base64_image=base64.b64encode(path.read_bytes()).decode()
             )
         raise ToolError(f"Failed to take screenshot: {result.error}")
 
@@ -257,7 +272,7 @@ class ComputerTool(BaseAnthropicTool):
         base64_image = None
 
         if take_screenshot:
-            await asyncio.sleep(self._screenshot_delay)
+            await asyncio.sleep(SHELL_SCREENSHOT_DELAY)
             base64_image = (await self.screenshot()).base64_image
 
         return ToolResult(output=stdout, error=stderr, base64_image=base64_image)
